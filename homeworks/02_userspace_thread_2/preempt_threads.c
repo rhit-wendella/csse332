@@ -11,8 +11,10 @@ these functions here in the .c file rather than the header.
 #include <ucontext.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <stdbool.h>
-#include "basic_threads.h"
+#include <unistd.h>
+#include "preempt_threads.h"
 
 // 64kB stack
 #define THREAD_STACK_SIZE 1024*64
@@ -43,6 +45,7 @@ bool finished;
 int index_number;
 int correct_context[MAX_THREADS];
 int current_thread;
+int alarm_time;
 
 /*
 initialize_basic_threads
@@ -102,6 +105,24 @@ void thread_function()
 create_new_thread(thread_function());
 
  */
+
+void alarm_mask(bool value){
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGALRM);
+    if(value){
+        if(sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
+            perror ("sigprocmask");
+        }
+    }
+    else{
+        if(sigprocmask(SIG_UNBLOCK, &mask, NULL) < 0) {
+            perror ("sigprocmask");
+        }
+    }
+}
+
+
 void create_new_thread(void (*fun_ptr)()) {
     create_new_parameterized_thread(fun_ptr, NULL);
 }
@@ -134,11 +155,21 @@ schedule_threads();
  */
 
 void thread_helper(void (*function_ptr)(void *), void *parameter){
+    alarm_mask(false);
+    ualarm(alarm_time, 0);
     function_ptr(parameter);
+    alarm_mask(true);
     finish_thread();
 }
 
+void alarm_stop(){
+    swapcontext(&threads[current_thread], &parent);
+    ualarm(alarm_time,0);
+}
+
+
 void create_new_parameterized_thread(void (*fun_ptr)(void*), void* parameter) {
+    alarm_mask(true);
     for(int i=0; i<MAX_THREADS; i++){
         if(correct_context[i] == 0){
             getcontext(&threads[i]);
@@ -162,6 +193,7 @@ void create_new_parameterized_thread(void (*fun_ptr)(void*), void* parameter) {
             break;
         }
     }
+    alarm_mask(false);
 }
 
 
@@ -196,15 +228,19 @@ printf("Starting threads...");
 schedule_threads()
 printf("All threads finished");
 */
-void schedule_threads() {
+void schedule_threads_with_preempt(int usecs) {
+    alarm_time = usecs; 
+    alarm_mask(true);
+    signal(SIGALRM, alarm_stop);  
+    
     while(finished == false){
         current_thread = 0;
         while(current_thread < MAX_THREADS){
+            // alarm_mask(true);
             if(correct_context[current_thread] == 1){
                 swapcontext(&parent, &threads[current_thread]);
             }
-            else if(correct_context[current_thread] == 2){
-                swapcontext(&threads[current_thread],&parent);
+            if(correct_context[current_thread] == 2){
                 free(threads[current_thread].uc_stack.ss_sp);
                 correct_context[current_thread] = 0;
             }
@@ -220,7 +256,7 @@ void schedule_threads() {
             finished = true;
         }
     }
-    
+    signal(SIGALRM, SIG_IGN);
 }
 
 /*
@@ -262,7 +298,10 @@ void thread_function()
 }
 
 */
+
+
 void yield() {
+    alarm_mask(true);
     swapcontext(&threads[current_thread], &parent);
 }
 
@@ -292,4 +331,5 @@ void thread_function()
 */
 void finish_thread() {
     correct_context[current_thread] = 2;
+    swapcontext(&threads[current_thread], &parent);
 }

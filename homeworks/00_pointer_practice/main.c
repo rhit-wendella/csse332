@@ -13,7 +13,10 @@ Look at the test cases for example of usage
 
  */
 int add_with_pointers(int *val1, int *val2) {
-    return 0;
+    int z = 0;
+    int *c = &z;
+    *c = *val1 + *val2;
+    return *c;
 }
 
 void test_add_with_pointers(CuTest *tc) {
@@ -36,8 +39,13 @@ Look at the test cases for example of usage
  */
 
 void ensure_correct_order(int *should_be_smaller, int *should_be_bigger) {
-
-  
+  if(*should_be_smaller > *should_be_bigger){
+      int t = 0;
+      int *c = &t;
+      *c = *should_be_smaller;
+      *should_be_smaller = *should_be_bigger;
+      *should_be_bigger = *c;
+  }
 }
 
 void test_ensure_correct_order(CuTest *tc) {
@@ -71,7 +79,14 @@ Look at the test cases for example of usage
  */
 
 int special_equals(int *val1, int *val2) {
-  return 0;
+    int value = 0;
+    if(val1 == val2){
+        value = value + 1;
+    }
+    if(*val1 == *val2){
+        value = value + 1;
+    }
+  return value;
 }
 
 void test_special_equals(CuTest *tc) {
@@ -116,8 +131,27 @@ Look at the test cases for example of usage
  */
 
 void string_with_q(char *s1, char* s2, char** output) {
-
-  
+    int check = 0;
+    for(int i = 0;i<strlen(s1);i++){
+        char letter = s1[i];
+        char letter2 = 'Q';
+        if(letter == letter2){
+            *output = s1;
+            check = 1;
+        }
+    }
+    for(int i = 0;i<strlen(s2);i++){
+        char letter = s2[i];
+        char letter2 = 'Q';
+        if(letter == letter2){
+            *output = s2;
+            check = 1;
+        }
+    }
+    if(check == 0){
+        *output = NULL;
+    }
+    
 }
 
 void test_string_with_q(CuTest *tc) {
@@ -181,8 +215,18 @@ Look at the test cases for example of usage
 
  */
 int sum_linked_list(struct ll_node* head) {
-    
-    return 0;
+    int sum = 0;
+    struct ll_node *node = head;
+    if(head == NULL){
+        return 0;
+    }
+    else{
+        while(node != NULL){
+            sum = sum + (*node).val;
+            node = (*node).next;
+        }
+    }
+    return sum;
 }
 
 void test_sum_linked_list(CuTest *tc) {

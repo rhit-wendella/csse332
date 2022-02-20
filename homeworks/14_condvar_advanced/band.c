@@ -57,16 +57,42 @@ int GUIT = 2;
 
 char* names[] = {"drummer", "singer", "guitarist"};
 
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t order[3];
+pthread_mutex_t playing = PTHREAD_MUTEX_INITIALIZER;
 
+int number[3];
+int members;
 
 // because the code is similar, we'll just have one kind of thread
 // and we'll pass its kind as a parameter
 void* friend(void * kind_ptr) {
 	int kind = *((int*) kind_ptr);
 	printf("%s arrived\n", names[kind]);
-	printf("%s playing\n", names[kind]);
+  pthread_mutex_lock(&lock);
+  if(number[(kind+1)%3]>0 && number[(kind-1)%3]>0){
+    number[(kind + 1 % 3)]--;
+    number[(kind - 1) % 3]--;
+    pthread_mutex_unlock(&lock);
+    pthread_mutex_lock(&playing);
+    members = 3;
+    pthread_mutex_unlock(&order[(kind + 1) % 3]);
+    pthread_mutex_unlock(&order[(kind - 1) % 3]);
+  }
+  else{
+    number[kind]++;
+    pthread_mutex_unlock(&lock);
+    pthread_mutex_lock(&order[kind]);
+  }
+  printf("%s playing\n", names[kind]);
 	sleep(1);
 	printf("%s finished playing\n", names[kind]);
+  pthread_mutex_lock(&lock);
+  members--;
+  if(members == 0){
+    pthread_mutex_unlock(&playing);
+  }
+  pthread_mutex_unlock(&lock);
 
 	return NULL;
 }
@@ -80,8 +106,13 @@ void create_friend(int* kind) {
 }
 
 int main(int argc, char **argv) {
-
-	create_friend(&DRUM);
+  for(int i = 0; i<3; i++){
+    pthread_mutex_init(&order[i], 0);
+    number[i]=0;
+  }
+  members = 0;
+	
+  create_friend(&DRUM);
 	create_friend(&DRUM);
 	create_friend(&GUIT);
 	create_friend(&GUIT);

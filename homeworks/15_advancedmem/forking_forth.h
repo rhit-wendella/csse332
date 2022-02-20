@@ -2,6 +2,7 @@
 void initialize_forths();
 int create_forth(char* code);
 
+
 struct run_output {
     char output[200];
     int result_code;

@@ -21,7 +21,6 @@ void thread_function2()
 }
 
 void main() {
-
     initialize_basic_threads();
     create_new_thread(thread_function);
     create_new_thread(thread_function2);

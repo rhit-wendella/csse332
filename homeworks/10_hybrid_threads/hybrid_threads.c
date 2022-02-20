@@ -12,7 +12,8 @@ these functions here in the .c file rather than the header.
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include "basic_threads.h"
+#include <pthread.h>
+#include "hybrid_threads.h"
 
 // 64kB stack
 #define THREAD_STACK_SIZE 1024*64
@@ -30,19 +31,21 @@ would make writing test code that exploits the thread max more
 annoying.  So please leave this value as it is and use MAX_THREADS
 (not the hardcorded value 5) in your code.
 */
-#define MAX_THREADS 5
-
-
+#define MAX_THREADS 100
+#define INVALID 0
+#define PAUSED 1
+#define RUNNING 2
+#define DONE 3
+#define MAKE 4
 // storage for your thread data
 ucontext_t threads[MAX_THREADS];
-
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 // add additional constants and globals here as you need
-ucontext_t parent;
-bool finished;
-int index_number;
-int correct_context[MAX_THREADS];
-int current_thread;
+__thread ucontext_t parent;
+int state[MAX_THREADS];
+__thread int current_thread_index;
+
 
 /*
 initialize_basic_threads
@@ -64,11 +67,10 @@ blank.
 
  */
 void initialize_basic_threads() {  
-    finished = false;
-    index_number = 0;
-    for(int i = 0; i<MAX_THREADS; i++){
-        correct_context[i] = 0;
+    for(int i = 0; i < MAX_THREADS; i++){
+        state[i] = INVALID;
     }
+    current_thread_index = -1;
 }
 
 /*
@@ -139,29 +141,33 @@ void thread_helper(void (*function_ptr)(void *), void *parameter){
 }
 
 void create_new_parameterized_thread(void (*fun_ptr)(void*), void* parameter) {
-    for(int i=0; i<MAX_THREADS; i++){
-        if(correct_context[i] == 0){
-            getcontext(&threads[i]);
-            
-            threads[i].uc_link = 0;
-            threads[i].uc_stack.ss_sp = malloc(THREAD_STACK_SIZE);
-            threads[i].uc_stack.ss_size = THREAD_STACK_SIZE;
-            threads[i].uc_stack.ss_flags = 0;
-            if (threads[i].uc_stack.ss_sp == 0)
-            {
-                perror("malloc: Could not allocate stack");
-                exit(1);
-            }
-            void (*helper_ptr)(void (*)(), void *);
-            helper_ptr = thread_helper;
-            void(*cast_ptr)() = (void(*)()) fun_ptr;
-            void (*helper_cast_ptr)() = (void (*)())helper_ptr;
-            
-            makecontext(&threads[i], helper_cast_ptr, 2, cast_ptr, parameter);
-            correct_context[i] = 1;
+    int index = -1;
+    for(int i = 0; i < MAX_THREADS; i++){
+        if(state[i] == INVALID){
+            index = i;
             break;
         }
     }
+    if(index == -1){
+        printf("Error: all threads used!\n");
+        exit(1);
+    }
+    pthread_mutex_lock(&lock);
+    state[index] = MAKE;
+    getcontext(&threads[index]);           
+    threads[index].uc_link = 0;
+    threads[index].uc_stack.ss_sp = malloc(THREAD_STACK_SIZE);
+    threads[index].uc_stack.ss_size = THREAD_STACK_SIZE;
+    threads[index].uc_stack.ss_flags = 0;
+    if (threads[index].uc_stack.ss_sp == 0)
+    {
+        perror("malloc: Could not allocate stack");
+        exit(1);
+    }
+    void(*cast_ptr)() = (void(*)()) thread_helper;
+    makecontext(&threads[index], cast_ptr, 2, fun_ptr, parameter);
+    state[index] = PAUSED;
+    pthread_mutex_unlock(&lock);
 }
 
 
@@ -196,31 +202,49 @@ printf("Starting threads...");
 schedule_threads()
 printf("All threads finished");
 */
-void schedule_threads() {
-    while(finished == false){
-        current_thread = 0;
-        while(current_thread < MAX_THREADS){
-            if(correct_context[current_thread] == 1){
-                swapcontext(&parent, &threads[current_thread]);
+void* schedule_threads(void* arg) {
+    bool running;
+    do {
+        running = false;
+        for(int i = 0; i < MAX_THREADS; i++){
+            pthread_mutex_lock(&lock);
+            if(state[i] == PAUSED){
+                state[i] = RUNNING;
+                pthread_mutex_unlock(&lock);
+                current_thread_index = i;
+                swapcontext(&parent, &threads[i]);
+                current_thread_index = -1;
+                pthread_mutex_lock(&lock);
+                if(state[i] == DONE){
+                    free(threads[i].uc_stack.ss_sp);
+                    state[i] = INVALID;
+                }
+                else{
+                    state[i] = PAUSED;
+                }
+                pthread_mutex_unlock(&lock);
             }
-            else if(correct_context[current_thread] == 2){
-                swapcontext(&threads[current_thread],&parent);
-                free(threads[current_thread].uc_stack.ss_sp);
-                correct_context[current_thread] = 0;
+            else{
+                pthread_mutex_unlock(&lock);
             }
-            current_thread++;
         }
-        int counter = 0;
         for(int i = 0; i<MAX_THREADS; i++){
-            if(correct_context[i] == 1){
-                counter++;
+            if(state[i] != INVALID){
+                running = true;
             }
         }
-        if(counter == 0){
-            finished = true;
-        }
+    }while(running == true);   
+    return NULL;
+}
+
+void schedule_hybrid_threads(int pthread_count){
+    pthread_t threads[pthread_count];
+    for(int i = 0; i <pthread_count; i++){
+        pthread_create(&threads[i], NULL, schedule_threads, NULL);
     }
-    
+    for(int i = 0; i <pthread_count; i++){
+        pthread_join(threads[i], NULL);
+    }
 }
 
 /*
@@ -263,7 +287,7 @@ void thread_function()
 
 */
 void yield() {
-    swapcontext(&threads[current_thread], &parent);
+    swapcontext(&threads[current_thread_index], &parent);
 }
 
 /*
@@ -291,5 +315,6 @@ void thread_function()
 
 */
 void finish_thread() {
-    correct_context[current_thread] = 2;
+    state[current_thread_index] = DONE;
+    yield();
 }

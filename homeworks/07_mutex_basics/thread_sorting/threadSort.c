@@ -84,13 +84,36 @@ void MergeSort(int array[], int inputLength) {
 
 // here's a global I used you might find useful
 char* descriptions[] = {"brute force","bubble","merge"};
-
+int vals_per_thread;
+int* data_array;
+suseconds_t* run_time;
 // I wrote a function called thread dispatch which parses the thread
 // parameters and calls the correct sorting function
 //
 // you can do it a different way but I think this is easiest
 void* thread_dispatch(void* data) {
+  int id = *(int *)data;
+  printf("Sorting indexes %d-%d with %s\n", vals_per_thread * id, vals_per_thread * (id + 1) - 1, descriptions[id%3]);
 
+  struct timeval startt, stopt;
+  suseconds_t usecs_passed;
+  gettimeofday(&startt, NULL);
+
+
+  if(id%3 == 0){
+    printf("yaya");
+    BruteForceSort(data_array + id * vals_per_thread, vals_per_thread);
+  }
+  else if (id%3 == 1){
+    BubbleSort(data_array + id * vals_per_thread, vals_per_thread);
+  }
+  else if (id%3 == 2){
+    MergeSort(data_array + id * vals_per_thread, vals_per_thread);
+  }
+  gettimeofday(&stopt, NULL);
+  usecs_passed = stopt.tv_usec - startt.tv_usec;
+  run_time[id] = usecs_passed;
+  printf("Sorting indexes %d-%d with %s done in %ld usecs\n", vals_per_thread * id, vals_per_thread * (id+1) - 1, descriptions[id%3], usecs_passed);
 }
 
 int main(int argc, char** argv) {
@@ -110,17 +133,23 @@ int main(int argc, char** argv) {
 
     // I'm reading the number of values you want per thread
     // off the command line
-    int vals_per_thread = atoi(argv[2]);
+    vals_per_thread = atoi(argv[2]);
     if(vals_per_thread <= 0 || vals_per_thread > MAX_VALS_PER_THREAD) {
         printf("bad vals_per_thread value %d\n", vals_per_thread);
         exit(1);
     }
 
     int total_nums = n * vals_per_thread;
-    int* data_array = malloc(sizeof(int) * total_nums);
+    data_array = malloc(sizeof(int) * total_nums);
     if(data_array == NULL) {
         perror("malloc failure");
         exit(1);
+    }
+    run_time = malloc(sizeof(suseconds_t) * n);
+    if (run_time == NULL)
+    {
+      perror("malloc failure");
+      exit(1);
     }
 
     // initialize the test data for sort
@@ -133,10 +162,40 @@ int main(int argc, char** argv) {
     }
 
     // create your threads here
+    pthread_t thread_id[n];
+    int id[n];
+
+    for(int i = 0; i<n; i++){
+      id[i] = i;
+      pthread_create(&thread_id[i], NULL, thread_dispatch, &id[i]);
+    }
 
     // wait for them to finish
 
+    for (int i = 0; i<n; i++){
+      pthread_join(thread_id[i], NULL);
+    }
+
+
     // print out the algorithm summary statistics
+
+    for(int i = 0; i<3; i++){
+      int total = 0;
+      int counter = 0;
+      int max = 0;
+      int min = run_time[i];
+      for(int k = i; k<=n; k = k + 3){
+        total = total + run_time[k];
+        counter++;
+        if(max<run_time[k]){
+          max = run_time[k];
+        }
+        if(run_time[k]<min){
+          min = run_time[k];
+        }
+      }
+      printf("%s avg %f usecs, max %d usecs, min %d usecs\n", descriptions[i], (float)total/counter, max, min);
+    }
 
     // print out the result array so you can see the sorting is working
     // you might want to comment this out if you're testing with large data sets
@@ -149,4 +208,5 @@ int main(int argc, char** argv) {
     }
 
     free(data_array); // we should free what we malloc
+    free(run_time);
 }

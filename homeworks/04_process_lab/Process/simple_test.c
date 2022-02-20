@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/wait.h>
+#include <string.h>
 
 #define simple_assert(message, test) do { if (!(test)) return message; } while (0)
 #define TEST_PASSED NULL
@@ -40,39 +42,56 @@ void setup() {
 
 char* test1();
 
-void* run_test(void *test_to_run_void) {
-    setup();
-    char* (*test_func)() = test_to_run_void;
-    return test_func();
+void snooze(){
+    exit(2);
 }
 
+
 void run_all_tests() {
-
-    pthread_t tests[100];
-    
-    
-    for(int i = 0; i < num_tests; i++) {
-        if(pthread_create(&tests[i], NULL, &run_test, test_funcs[i])) {
-
-            printf("Error creating thread\n");
-            exit(2);
-
+    setup();
+    int run_order[num_tests];
+    int pipeResult[num_tests][2];
+    signal(SIGALRM, snooze);
+    for(int i = 0; i < num_tests; i++){
+        if(pipe(pipeResult[i])==-1){
+            perror("BAD PIPE\n");
+            exit(EXIT_FAILURE);
         }
+        int child = fork();
+        if(child == 0){
+            alarm(3);
+            char *tresult = test_funcs[i]();
+            if(tresult == TEST_PASSED){
+                close(pipeResult[i][1]);
+                exit(0);
+            }
+            else {
+                write(pipeResult[i][1], tresult, strlen(tresult));
+                close(pipeResult[i][1]);
+                exit(1);
+            }
+        }
+        close(pipeResult[i][1]);
+        run_order[i] = child;
     }
-    for(int i = 0; i < num_tests; i++) {
-        char* result = NULL;
-        if(pthread_join(tests[i],(void**) &result)) {
-            printf("Error joining thread\n");
-            exit(2);
+    for(int i = 0; i<num_tests; i++){
+        int wait_time;
+        waitpid(run_order[i], &wait_time, 0);
+        char message[256];
+        read(pipeResult[i][0], message, 256);
+        if (!WIFEXITED(wait_time)){
+            printf("TEST CRASHED\n");
         }
-        if(result == TEST_PASSED) {
-            printf("Test Passed\n");
-        } else {
-            printf("Test Failed: %s\n",result);
+        else if(WEXITSTATUS(wait_time)==0){
+            printf("TEST PASSED\n");
         }
-
-    }
-        
+        else if (WEXITSTATUS(wait_time) == 2){
+            printf("TEST TIMED OUT\n");
+        }
+        else if (WEXITSTATUS(wait_time) == 1){
+            printf("TEST FAILED because %s\n", message);
+        }
+    }   
 }
 
 char* test1() {
@@ -160,8 +179,8 @@ void main() {
     add_test(test1);
     add_test(test2);
     add_test(test3);
-    // add_test(test4); // uncomment for Step 4
-    // add_test(test5); // uncomment for Step 5
+    add_test(test4); // uncomment for Step 4
+    add_test(test5); // uncomment for Step 5
     run_all_tests();
     
 }

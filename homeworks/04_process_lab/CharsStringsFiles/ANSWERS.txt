@@ -4,12 +4,14 @@ Answer the questions posted in the instructions here.
 
 Question 1:
 
-(a)
+(a) Segmentation fault (core dumped)
 
 
-(b)
+(b) You step in at line 130 of the csf-main.c which is the printfiletoconsole3 function. Then as you step into at line 130  for fgetlines, 
+then you step in at line 65 for fgetline. You then Then the error occurs when calling the fgets function at line 30
 
-Problem 2:
+Problem 2: nextLine in the fgetlines is NULL so when it goes into fgetline with that parameter and fgets tries to pull it, 
+it is pulling a NULL pointer
 
-Problem 3:
+Problem 3: I don't know if it means really make the changes in the file or just write out what you would do. I just changed the file.
 

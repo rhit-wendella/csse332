@@ -28,28 +28,95 @@
 
   This is similar to the readers/writers problem BTW.
  **/
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t carpen = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t paint = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t decor = PTHREAD_MUTEX_INITIALIZER;
+
+int carpen_number = 0;
+int paint_number = 0;
+int decor_number = 0;
 
 void* carpenter(void * ignored) {
-
+	pthread_mutex_lock(&lock);
+	if(paint_number<=0 && decor_number<=0){
+		pthread_mutex_unlock(&carpen);
+	}
+	carpen_number++;
+	pthread_mutex_unlock(&lock);
+	pthread_mutex_lock(&carpen);
 	printf("starting carpentry\n");
 	sleep(1);
 	printf("finished carpentry\n");
+	pthread_mutex_lock(&lock);
+	carpen_number--;
+	if(carpen_number>0){
+		pthread_mutex_unlock(&carpen);
+	}
+	else if(paint_number>0){
+		pthread_mutex_unlock(&paint);
+	}
+	else if(decor_number>0){
+		pthread_mutex_unlock(&decor);
+	}
+	pthread_mutex_unlock(&lock);
 	return NULL;
 }
 
 void* painter(void * ignored) {
-
+	pthread_mutex_lock(&lock);
+	if(carpen_number<=0 && decor_number<=0){
+		pthread_mutex_unlock(&paint);
+	}
+	paint_number++;
+	pthread_mutex_unlock(&lock);
+	pthread_mutex_lock(&paint);
 	printf("starting painting\n");
 	sleep(1);
 	printf("finished painting\n");
+	pthread_mutex_lock(&lock);
+	paint_number--;
+	if(paint_number>0){
+		while(paint_number>0){
+			pthread_mutex_unlock(&paint);
+			paint_number--;
+		}
+	}
+	else if(carpen_number>0){
+		pthread_mutex_unlock(&carpen);
+	}
+	else if(decor_number>0){
+		pthread_mutex_unlock(&decor);
+	}
+	pthread_mutex_unlock(&lock);
 	return NULL;
 }
 
 void* decorator(void * ignored) {
-
+	pthread_mutex_lock(&lock);
+	if(carpen_number<=0 && paint_number<=0){
+		pthread_mutex_unlock(&decor);
+	}
+	decor_number++;
+	pthread_mutex_unlock(&lock);
+	pthread_mutex_lock(&decor);
 	printf("starting decorating\n");
 	sleep(1);
 	printf("finished decorating\n");
+	pthread_mutex_lock(&lock);
+	decor_number--;
+	if(decor_number>0)
+        while (decor_number>0){
+            pthread_mutex_unlock(&decor);
+            decor_number--;
+        }
+    else if(carpen_number>0){
+        pthread_mutex_unlock(&carpen);
+	}
+    else if(paint_number>0){
+		pthread_mutex_unlock(&paint);
+	}
+	pthread_mutex_unlock(&lock);
 	return NULL;
 }
 

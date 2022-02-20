@@ -5,7 +5,7 @@
 #include <signal.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include "forth_embed.h"
+#include "forth/forth_embed.h"
 
 /*
 
@@ -37,7 +37,7 @@ static void handler(int sig, siginfo_t *si, void *unused)
     // in your code you'll have to compute a particular page start and
     // map that, but in this example we can just map the same page
     // start all the time
-    printf("mapping page starting at %p\n", STACKHEAP_MEM_START);
+    printf("mapping page starting at %d\n", STACKHEAP_MEM_START);
     void* result = mmap((void*) STACKHEAP_MEM_START,
                         getpagesize(),
                         PROT_READ | PROT_WRITE | PROT_EXEC,

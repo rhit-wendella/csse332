@@ -22,11 +22,33 @@ Makefile provided.
 #include <sys/wait.h>
 #include <pthread.h>
 
+struct arg_struct{
+  unsigned long long int start;
+  unsigned long long int end;
+  unsigned long long int target;
+  unsigned long long int id;
+};
+
+void *runner(void* arguments) {
+  struct arg_struct *arg = (struct arg_struct *)arguments;
+  for (unsigned long long int i = arg->start; i <= arg->end; i = i + 1) {
+    /* You'll want to keep this testing line in.  Otherwise it goes so
+       fast it can be hard to detect your code is running in
+       parallel. Also test with a large number (i.e. > 3000) */
+    printf("Thread %llu testing %llu\n", arg->id, i);
+    if (arg->target % i == 0) {
+      printf("%llu is a factor\n", i);
+    }
+  }
+}
+
 
 int main(void) {
   /* you can ignore the linter warning about this */
   unsigned long long int target, i, start = 0;
   int numThreads;
+  unsigned long long int increment;
+
   printf("Give a number to factor.\n");
   scanf("%llu", &target);
 
@@ -37,15 +59,22 @@ int main(void) {
     return 0;
   }
 
-  for (i = 2; i <= target/2; i = i + 1) {
-    /* You'll want to keep this testing line in.  Otherwise it goes so
-       fast it can be hard to detect your code is running in
-       parallel. Also test with a large number (i.e. > 3000) */
-    printf("testing %llu\n", i);
-    if (target % i == 0) {
-      printf("%llu is a factor\n", i);
-    }
+  pthread_t thread_id[numThreads];
+  struct arg_struct arguments[numThreads];
+  increment = target/numThreads;
+  for (i = 1; i<=numThreads; i++){
+    arguments[i-1].id = i;
+    arguments[i-1].end = increment*i;
+    arguments[i-1].target = target;
+    arguments[i-1].start = 1 + (increment*(i-1));
+
+    pthread_create(&thread_id[i-1], NULL, runner, (void *)&arguments[i-1]);
   }
+  for (i = 0; i<numThreads; i++){
+    pthread_join(thread_id[i], NULL);
+  }
+
+
   return 0;
 }
 
